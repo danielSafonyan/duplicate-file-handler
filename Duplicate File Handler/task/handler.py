@@ -1,63 +1,111 @@
-import argparse
-import sys
+from collections import defaultdict
 import os
+import sys
+import hashlib
 
 
-def main():
-    parser = argparse.ArgumentParser(description='In this stage, we start by identifying files of the same size in bytes.')
-    parser.add_argument("root_directory", nargs='?', default=None)
-    args = parser.parse_args()
+if len(sys.argv) < 2:
+    print("Directory is not specified")
+    exit()
 
-    if args.root_directory is None:
-        print("Directory is not specified")
-        sys.exit()
 
-    all_files = []
-    for root, dirs, files in os.walk(args.root_directory):
-        for name in files:
-            file = os.path.join(root, name)
-            all_files.append(file)
+# Program's start
+root_dir = sys.argv[1]
+os.chdir(root_dir)
+full_path = os.getcwd()
+file_sizes = defaultdict(set)
+file_hashes = defaultdict(list)
+duplicates = defaultdict(dict)
 
-    print('Enter file format:')
-    file_format = input()
 
-    print('\nSize sorting options:\n1. Descending\n2. Ascending\n')
-
+def input_sorting_option() -> str:
+    print("""\
+Size sorting options:
+1. Descending
+2. Ascending""")
     while True:
-        print('Enter a sorting option:')
-        sorting_option = input()
-
-        if sorting_option in ['1', '2']:
-            if sorting_option == '1':
-                ascending = False
-            else:
-                ascending = True
+        sorting_option = input("\nEnter a sorting option:\n")
+        if sorting_option in ('1', '2'):
             break
-        print('Wrong option')
-
-    dict_size_file = dict()
-
-    if not file_format:
-        for file in all_files:
-            file_size = str(os.path.getsize(file))
-            if file_size not in dict_size_file:
-                dict_size_file[file_size] = list()
-            dict_size_file[file_size].append(file)
-
-    sorted_dict_keys = [int(x) for x in dict_size_file.keys()]
-
-    if ascending:
-        sorted_dict_keys.sort()
-    else:
-        sorted_dict_keys.sort(reverse=True)
-
-    sorted_dict_keys = [str(x) for x in sorted_dict_keys]
-
-    for key in sorted_dict_keys:
-        print(key, 'bytes')
-        for value in dict_size_file[key]:
-            print(value)
+        else:
+            print("\nWrong option\n")
+    return sorting_option
 
 
-if __name__ == '__main__':
-    main()
+def collect_file_sizes():
+    for root, dirs, files in os.walk(full_path):
+        for name in files:
+            if file_format:
+                current_format = os.path.splitext(name)[-1].replace('.', '')
+                if current_format != file_format:
+                    continue
+            file_path = os.path.join(root, name)
+            file_size = os.path.getsize(file_path)
+            file_sizes[file_size].add(file_path)
+
+
+def print_size(size):
+    print(f'\n{size} bytes')
+
+
+def print_file_sizes():
+    for size, files in sorted(file_sizes.items(), reverse=descending_sorting):
+        if len(files) > 1:
+            print_size(size)
+            for file_name in files:
+                print(file_name)
+        else:
+            file_sizes.pop(size)
+
+
+def ask_for_duplicates_checking():
+    if file_sizes:
+        user_input = input("Check for duplicates?\n")
+        while user_input not in ("yes", "no"):
+            print("Wrong option")
+        if user_input == "no":
+            exit()
+
+
+def get_file_hash(file_path):
+    md5hash = hashlib.md5()
+    with open(file_path, 'rb') as file:
+        chunk = None
+        while chunk != b'':
+            chunk = file.read(1024)
+            md5hash.update(chunk)
+    return md5hash.hexdigest()
+
+
+def collect_hashes():
+    for size, files in file_sizes.items():
+        for file_name in files:
+            file_hash = get_file_hash(file_name)
+            if not duplicates[size].get(file_hash):
+                duplicates[size][file_hash] = []
+            duplicates[size][file_hash].append(file_name)
+
+
+def print_duplicates():
+    index = 1
+    for file_size, hashes in sorted(duplicates.items(), reverse=descending_sorting):
+        size_printed = False
+        for file_hash, file_names in hashes.items():
+            if len(file_names) < 2:
+                continue
+            if not size_printed:
+                print_size(file_size)
+                size_printed = True
+            print(f"Hash: {file_hash}")
+            for file_name in file_names:
+                print(f"{index}. {file_name}")
+                index += 1
+
+
+file_format = input("Enter file format:\n")
+descending_sorting: bool = input_sorting_option() == '1'
+collect_file_sizes()
+print_file_sizes()
+ask_for_duplicates_checking()
+collect_hashes()
+print_duplicates()
